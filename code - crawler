@@ -1,0 +1,374 @@
+import urllib.request
+from bs4 import BeautifulSoup
+import pandas as pd
+import http.client
+from urllib.request import urlopen, Request
+#import json
+from fuzzywuzzy import fuzz
+from datetime import datetime
+
+
+#%%
+
+df=pd.read_excel(r'C:\Users\grma8007\Documents\Pyton\scraper\ebay_10292019_09.56.11.xlsx', 
+                 dtype={'EBAY_EAN': str})
+
+#%%
+df['Name searched']=None
+df['EBAY_EAN']=None
+df['Distance']=None
+df['EBAY_WWW']=None
+df['FINAL_WWW']=None
+#%%
+df['FINAL_Distance']=None
+df['FINAL_Names']=None
+
+#%%
+df['FINAL_WWW']=df['FINAL_WWW'].astype(str)  # na stale musi zostac
+
+
+#%%
+names=df.iloc[:,2]
+names0=[]
+names1=[]
+names2=[]
+
+for n in names:
+            names0.append(n.replace(" &",""))
+for n in names0:
+            names1.append(n.replace("'",""))
+for n in names1:
+            names2.append(n.replace(" ","+"))
+
+#%%
+
+def make_urls(names):
+      url="https://www.ebay.com.au/sch/i.html?_from=R40&_trksid=m570.l1313&_nkw="
+      #url_end="+pharmacy+direct&source=lnms&tbm=isch&sa=X&ved=0ahUKEwj-k-j9_LHlAhVR2aYKHQ8fASgQ_AUIEigB&biw=765&bih=937"
+      urls=[]
+      for name in names2:
+            #urls.append(urllib.parse.urljoin(url, name))
+            temp_name=url+ name
+            urls.append(temp_name)
+      return urls   
+names_final=make_urls(names2)
+
+#%% ###### START LOOP #########
+# wyszukiwanie w ebay.com.au nazw produktow
+# funkcja 1
+
+def eans_loop(reh_out):
+      try:
+      
+            for reh in list(range(reh_out,len(names_final))):
+                  
+                  #reh=13
+                  print("---------------")
+                  print(reh)
+                  i=names_final[reh]
+                  print(i)
+                  headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.3'}
+                  i=i.replace(u'\xa0', u'')
+                  reg_url = i
+                  req = Request(url=reg_url, headers=headers) 
+                  html = urlopen(req).read()
+                  soup = BeautifulSoup(html,'html.parser')
+                  #time.sleep(1)
+                  
+                  #%
+                  #soup
+                  if soup is None:
+                      soup = BeautifulSoup(html,'html.parser')
+                      #time.sleep(1)
+                      print("soup rerun")
+                      
+                  main=soup.find('div',attrs={'id':'srp-river-main'})
+                  if main is None:
+                      main=soup.find('div',attrs={'id':'srp-river-main'})
+                      #time.sleep(1)
+                      print("main rerun")
+                  
+                  
+                  #%
+                  #%
+                  # z wynikow wyszukiwania na ebay pobranie linkow do znalezisk oraz title
+                  #time.sleep(1)
+                  real_links=[]
+                  names=[]
+                  
+                  all_links_ebay = main.find_all("a")
+                  if all_links_ebay is None:
+                      all_links_ebay = main.find_all("a")
+                  
+                  all_names=main.find_all("h3")
+                  if all_names is None:
+                      all_names=main.find_all("h3")
+                  
+                  
+                  for link in all_links_ebay:
+                      real_link=link.get("href")
+                      if real_link is None:
+                          real_link=link.get("href")
+                          
+                      try:
+                            b_el = link.find('h3').text
+                      except(AttributeError):
+                            b_el = "None"
+                            #print("not proper link")
+                      #print(b_el)
+                      #print(real_link)
+                      names.append(b_el)
+                      real_links.append(real_link)
+                  
+                  #%
+                  # ustawienie linkow w data frame
+                  lst=list(zip(names,real_links))
+                  ebay_data=pd.DataFrame(lst, columns=['Names','Links'])
+                  ebay_data['Score']=None
+                  
+                  # koniec funkcji 1 return ebay_data
+                  #%
+                  # przypisanie scoru linkom wedlug title
+                  
+                  for k in list(range(0,len(ebay_data['Names']))):
+                        score=fuzz.ratio(names1[reh],ebay_data['Names'][k]) #tutaj i
+                        ebay_data['Score'][k]=score
+                  
+                  # wybrac najlepiej dopasowane czyli najpierw sort po score a potem po indeks
+                  # bo najlepsze trafienia wypadaja zwykle najwyzej w ebay
+                        
+                  ebay_data_final=ebay_data
+                  ebay_data_final=ebay_data_final.sort_values(by=['Score'],ascending=False)
+                  ebay_data_final=ebay_data_final.iloc[0:8,:]
+                  ebay_data_final=ebay_data_final.sort_index()
+                  ebay_data_final=ebay_data_final.iloc[0:4 ,:]
+                  #%
+                  ebay_data_final=ebay_data_final[ebay_data_final['Names']!='None']
+                  ebay_data_final.reset_index(drop=True, inplace=True)
+                  ebay_data_final['EAN']=None
+                  
+                  
+                  #% ######### INNER LOOP ########## 
+                  # dla kazdego linku z dobrym scorem - wchodzmy do srodka i szukamy ean
+                  # start funkcj 2 
+                  for ite in list(range(0,len(ebay_data_final['Names']))):
+                      #ite=3
+                      print(ite)
+                      j = ebay_data_final['Links'][ite]
+                      
+                      headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.3'}
+                      j=j.replace(u'\xa0', u'')
+                      reg_url = j
+                      req = Request(url=reg_url, headers=headers) 
+                      html = urlopen(req).read()
+                      soup = BeautifulSoup(html,'html.parser')
+                      #time.sleep(1)
+                      if soup is None:
+                         soup = BeautifulSoup(html,'html.parser')
+                         print("inner soup rerun")
+                         #time.sleep(1)
+                         
+                      main=soup.find('div',attrs={'id':'vi-desc-maincntr'})
+                      if main is None:
+                          main=soup.find('div',attrs={'id':'vi-desc-maincntr'})
+                          print("inner main rerun")
+                          #time.sleep(1)
+                      
+                      #time.sleep(1)
+                      table=main.find('table', attrs={'role':'presentation'})
+                      if table is None:
+                          table=main.find('table', attrs={'role':'presentation'})
+                          #time.sleep(1)
+                      table_df = pd.read_html(str(table))[0]
+                      #%
+                      # ustawiamy tabele w data frame i robimy greedy search for EAN lub UPC
+                      # jesli nie ma podanego ean ani upc to ean=0
+                      
+                      sub="EAN:"
+                      sub2="UPC:"
+                      ean=0 #zerowanie ean z poprzedniego przeszukania, poprzedniego linku 
+                      
+                      for rows in list(range(0,table_df.shape[0])):
+                          #print(rows)
+                      
+                          for columns in list(range(0,table_df.shape[1])):
+                              if table_df.iloc[rows][columns]==sub or table_df.iloc[rows][columns]==sub2:
+                                  ean=table_df.iloc[rows][columns+1]
+                                  break
+                              
+                      ebay_data_final['EAN'][ite]=ean
+                      print(ean)
+                      #%
+                      
+                      ebay_data_final=ebay_data_final[ebay_data_final['EAN']!=0]
+                      ebay_data_final=ebay_data_final[ebay_data_final['EAN']!='Does not apply']
+                      ebay_data_final=ebay_data_final[ebay_data_final['EAN']!='Does Not apply']
+                      ebay_data_final=ebay_data_final[ebay_data_final['EAN']!='Does Not Apply']
+                      ebay_data_final=ebay_data_final[ebay_data_final['EAN']!='DOES NOT APPLY']
+                      ebay_data_final=ebay_data_final[ebay_data_final['EAN']!='None']
+                      
+                      
+                      #%
+                  #%
+                      
+                  # IF ebay_data_final length >0 -> NIE TRZEBA!!!!
+                  
+                  ean_pre_final=ebay_data_final[ebay_data_final['Score']==ebay_data_final['Score'].max()]
+                  if len(ean_pre_final['EAN'])>0:
+                        ean_final=ean_pre_final.iloc[0]['EAN']
+                        
+                        df.at[reh,'Name searched']=ean_pre_final.iloc[0]['Names']
+                        df.at[reh,'EBAY_EAN']=ean_final
+                        df.at[reh,'EBAY_WWW']=ean_pre_final.iloc[0]['Links']
+                        df.at[reh,'Distance']=ean_pre_final.iloc[0]['Score']
+                  else:
+                  
+                        df.at[reh,'Name searched']=0
+                        df.at[reh,'EBAY_WWW']=0
+                        
+            return reh                 
+      except(AttributeError, http.client.IncompleteRead):
+            return reh
+      
+# koniec funkcji 
+
+
+#%%
+reh_out=284
+out_it=284
+
+#%%
+      
+reh_out=0
+out_it=0
+
+#%%
+while out_it<(len(names_final)-1):
+            out_it=eans_loop(reh_out)
+            reh_out=out_it
+      
+      
+# podjecie decyzji ktorego eanu szukac w ggl
+
+#%% 
+
+now = datetime.now()
+today=now.strftime("%m%d%Y_%H.%M.%S")
+output_name='ebay_' + today +'.xlsx'
+directory=(r'C:\Users\grma8007\Documents\Pyton\scraper')
+df.to_excel(directory+'\\' +output_name)    
+
+#%%
+
+########## FUNKCJA 2 ##############
+
+d2=pd.read_excel(r'C:\Users\grma8007\Documents\Pyton\scraper\pattern.xlsx')
+
+#%%
+
+def make_urls_eans(input_eans):
+      url_ean="https://www.google.com/search?q="
+      #url_end_ean="&source=lnms&tbm=isch&sa=X&ved=0ahUKEwj-k-j9_LHlAhVR2aYKHQ8fASgQ_AUIEigB&biw=765&bih=937"
+      urls_eans=[]
+      for eans in input_eans:
+            #urls.append(urllib.parse.urljoin(url, name))
+            temp_name_eans=url_ean+ eans
+            urls_eans.append(temp_name_eans)
+      return urls_eans
+
+names_final_eans=make_urls_eans(df['EBAY_EAN'])
+
+#%%
+
+it_ggl=-1
+
+for i2 in names_final_eans:
+      it_ggl=it_ggl+1
+      print(it_ggl)
+      #i2=names_final_eans[0]
+      
+      headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.3'}
+      reg_url = i2
+      req = Request(url=reg_url, headers=headers) 
+      html = urlopen(req).read()
+      soup = BeautifulSoup(html,'html.parser')
+      #time.sleep(1)
+      
+      #%
+      #soup
+      if soup is None:
+          soup = BeautifulSoup(html,'html.parser')
+          #time.sleep(1)
+          print("soup rerun")
+          
+      main=soup.find('div',attrs={'id':'center_col'})
+      if main is None:
+          main=soup.find('div',attrs={'id':'center_col'})
+          #time.sleep(1)
+          print("main rerun")
+      #main
+      
+      #%
+      
+      real_links2=[]
+      names2=[]
+      
+      all_links_ggl = main.find_all("a")
+      if all_links_ggl is None:
+          all_links_ggl = main.find_all("a")
+      
+      all_names_ggl=main.find_all("h3")
+      if all_names_ggl is None:
+          all_names_ggl=main.find_all("h3")
+      
+      
+      for link in all_links_ggl:
+          real_link=link.get("href")
+          if real_link is None:
+              real_link=link.get("href")
+              
+          try:
+                b_el = link.find('h3').text
+          except(AttributeError):
+                b_el = "None"
+                #print("not proper link")
+          #print(b_el)
+          #print(real_link)
+          names2.append(b_el)
+          real_links2.append(real_link)
+      
+      lst=list(zip(names2,real_links2))
+      ggl_data=pd.DataFrame(lst, columns=['Names','Links'])
+      ggl_data = ggl_data[ggl_data['Names']!='None']
+      
+      #%
+      
+      
+      for p in d2['Patterns']:
+      
+            check=ggl_data['Links'].str.startswith(p)
+            ggl_out=ggl_data[check]
+            ggl_out.reset_index(drop=True, inplace=True)
+            if len(ggl_out['Links'])>0:
+                  print(ggl_out['Links'][0])
+                  df.at[it_ggl, 'FINAL_WWW'] = ggl_out.iloc[0]['Links']
+                  df.at[it_ggl, 'FINAL_Names'] = ggl_out.iloc[0]['Names']
+                  break
+
+            #else: next strona google
+
+#%%
+
+for n in list(range(0,len(df['Name']))):
+      score=fuzz.ratio(df['Name'][n],df['FINAL_Names'][n]) 
+      df.at[n,'FINAL_Distance']=score
+      
+
+#%%
+
+now = datetime.now()
+today=now.strftime("%m%d%Y_%H.%M.%S")
+output_name='GGL_outage_' + today +'.xlsx'
+directory=(r'C:\Users\grma8007\Documents\Pyton\scraper')
+df.to_excel(directory+'\\' +output_name)  
+
