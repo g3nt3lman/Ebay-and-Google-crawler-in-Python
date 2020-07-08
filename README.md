@@ -1,7 +1,7 @@
 # Crawler-Ebay
 
 This project was done, due to improving freelance work. Some employer on Upwork portal wanted to search for EANs of particular products. 
-The provided me with products names and initially wanted to look for products barcodes manually. I have created crawler which look for 
+Client provided me with products names and initially wanted to look for products barcodes manually. I have created crawler which look for 
 those products onb ebay, get EANS from there and than search those just finded barcodes in google.
 Contractor approved a list of sites from where the coming EANs were robust. Those sites adresses are listed in pattern file.
 If google search results printed out the site that is in that list, than finally ean is approved and mentioned site is added to uotput
