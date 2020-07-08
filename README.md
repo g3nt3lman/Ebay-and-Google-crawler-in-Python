@@ -14,3 +14,7 @@ be search with other method.
 In this project to find sites and product that fit the most given names, I used Levensthein distance to compare found products with the 
 given ones. Aquired score from Levensthein function was compared to other witihin a search results, and that with best score was choosen
 both on ebay and google search step.
+
+Solutions provided final result which is EAN number with about 60% accuracy
+
+
